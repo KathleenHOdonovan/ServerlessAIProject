@@ -43,23 +43,14 @@ class RunVMMagic(Magics):
             try:
                 
                 try:
-                    vm.run_code(cell)
+                    #parse line code to see if any packages are needed to be installed
+                    vm.run_code(cell, line)
                 except Exception as e:
                     print(f"❌ An error occurred while running code on the VM:\n{e}")
                 finally:
                     vm.delete_vm()
-                # # Execute full block of code
-                #  # Execute all but the last line
-                # code_lines = cell.strip().split("\n")
-                # exec_lines, last_line = code_lines[:-1], code_lines[-1]
-            
-                # # Run the exec part (assignments, imports, etc.)
-                # exec("\n".join(exec_lines), ip.user_ns)
-            
-                # # Evaluate the last line
-                # result = eval(last_line, ip.user_ns)
             except Exception as e:
                 return f"Error: {e}"
-        return f"Ran on a gpu here is the result"
+        return f"Finished Running Command on GPU VM"
 def load_ipython_extension(ipython):
     ipython.register_magics(RunVMMagic)

@@ -87,7 +87,7 @@ class CloudVM:
             return external_ip
         else:
             return None
-    def run_code(self, code: str):
+    def run_code(self, code: str, packages=None):
         """Run arbitrary Python code on the VM and print output live."""
         print("🧠 Executing code remotely...")
         gcloud_path = shutil.which("gcloud")
@@ -100,11 +100,8 @@ class CloudVM:
         # else:
             # print("goooogle")
             # print(gcloud_path)
-        # Escape quotes and newlines safely
-        # safe_code = code.replace('"', '\\"').replace("`", "\\`").replace("$", "\\$")
-        # safe_code = code.replace("\n", ";").replace('"', '\\"')
-        # command = f'python3 -c "{safe_code}"'
-
+            
+        
         # Encode the full Python code to base64 to safely preserve newlines and quotes
         encoded_code = base64.b64encode(code.encode()).decode("utf-8")
     
@@ -112,6 +109,20 @@ class CloudVM:
         remote_cmd = (
             f'python3 -c "import base64; exec(base64.b64decode(\'{encoded_code}\').decode())"'
         )
+        
+        print("packages")
+        print(packages)
+        #Handle Installing User Defined Packages on the VM
+        if packages and isinstance(packages, str):
+            packages = [pkg.strip() for pkg in packages.split(" ")]
+            
+            install_cmd = (
+                "sudo apt-get update -y && "
+                "sudo apt-get install -y python3-pip && "
+                "pip3 install -q " + " ".join(packages)
+            )
+            remote_cmd = f"{install_cmd} && {remote_cmd}"
+
         self.wait_for_ssh(self.get_vm_external_ip())
         print(f"🚀 Running command on VM {self.vm_name} ...")
 
