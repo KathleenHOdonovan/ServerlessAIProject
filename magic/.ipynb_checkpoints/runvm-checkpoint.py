@@ -4,7 +4,7 @@ from sshCommands import CloudVM
 #STATIC VARIABLES THAT CAN BE CHANGES DEPENDING ON WHO IS USING THIS APPLICATION:
 
 # Path to your service account JSON file
-service_account_file = r"C:\Users\kj2od\Documents\ServerlessAI\genial-caster-473015-f0-d2fdd5d3592d.json"
+service_account_file = "/Users/genial-caster-473015-f0-55ca72882d9e.json"
 # Your GCP project ID
 project_id = "genial-caster-473015-f0"
 # Zone of execution
