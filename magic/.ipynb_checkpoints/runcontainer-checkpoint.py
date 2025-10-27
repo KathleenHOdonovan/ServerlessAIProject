@@ -1,13 +1,11 @@
 from IPython.core.magic import (Magics, magics_class, line_cell_magic)
 from connectContainer import CloudContainer
 import time
-#STATIC VARIABLES THAT CAN BE CHANGES DEPENDING ON WHO IS USING THIS APPLICATION:
+import atexit
 
-# Path to your service account JSON file
+# STATIC VARIABLES THAT CAN BE CHANGED DEPENDING ON WHO IS USING THIS APPLICATION
 service_account_file = r"C:\Users\kj2od\Documents\ServerlessAI\genial-caster-473015-f0-d2fdd5d3592d.json"
-# Your GCP project ID
 project_id = "genial-caster-473015-f0"
-# Zone of execution
 zone = "us-east4-c"
 
 # Global VM instance
@@ -36,46 +34,8 @@ class RunContainerMagic(Magics):
             print(f"⏱ Total execution time: {end - start:.2f} seconds")
         except Exception as e:
             print(f"❌ An error occurred while running code on the VM:\n{e}")
-        # #Start up VM
-        # vm = CloudContainer(
-        #     service_account_file=service_account_file,
-        #     project_id=project_id,
-        #     zone=zone
-        # )
-        
-        # ip = get_ipython()
-        
-        # vm.connect_vm()
-        
-        # if cell is None:
-        #     try:
-        #         # Evaluate in the user’s namespace
-        #         ip = get_ipython()
-        #         # result = eval(line, ip.user_ns)
-        #         try:
-        #             vm.run_code(line)
-        #         except Exception as e:
-        #             print(f"❌ An error occurred while running code on the VM:\n{e}")
-        #         finally:
-        #             vm.stop_vm()
-        #     except Exception as e:
-        #         return f"Error: {e}"
-        # else:
-        #     try:
-                
-        #         try:
-        #             #parse line code to see if any packages are needed to be installed
-        #             start= time.time()
-        #             vm.run_code(cell)
-        #             end= time.time()
-        #             print(f"Total time: {end - start:.2f} seconds")
-            #     except Exception as e:
-            #         print(f"❌ An error occurred while running code on the VM:\n{e}")
-            #     finally:
-            #         vm.stop_vm()
-            # except Exception as e:
-            #     return f"Error: {e}"
         return f"Finished Running Command on Container"
+
 # ---------------- EXTENSION LOAD/UNLOAD ----------------
 def load_ipython_extension(ipython):
     global vm
@@ -91,17 +51,30 @@ def load_ipython_extension(ipython):
     print("✅ VM is ready for running containers!")
 
     # Optional: pre-pull container image to speed up first run
-    print("📦 Pre-pulling container image for faster runs...")
+    print("📦 starting container...")
     try:
-        vm.pull_container()
+        vm.start_container()  # starts container and keeps it alive
     except Exception as e:
-        print(f"⚠️ Could not pre-pull container image: {e}")
+        print(f"⚠️ Could not start container image: {e}")
 
+    # Register automatic cleanup when notebook/kernel shuts down
+    atexit.register(_cleanup)
 
 def unload_ipython_extension(ipython):
+    _cleanup()
+
+def _cleanup():
+    """Stop container and VM cleanly."""
     global vm
     if vm:
-        print("🛑 Stopping VM...")
-        vm.stop_vm()
+        print("🧹 Cleaning up resources...")
+        try:
+            vm.stop_container()
+        except Exception as e:
+            print(f"⚠️ Error stopping container: {e}")
+        try:
+            vm.stop_vm()
+        except Exception as e:
+            print(f"⚠️ Error stopping VM: {e}")
         vm = None
-        print("✅ VM stopped")
+        print("✅ Cleanup complete!")

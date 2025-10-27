@@ -24,9 +24,9 @@ class CloudContainer:
                 "Please install it from https://cloud.google.com/sdk/docs/install\n"
                 "and make sure it is added to your system PATH."
             )
-        else:
-            print("goooogle")
-            print(self.gcloud_path)
+        # else:
+        #     print("goooogle")
+        #     print(self.gcloud_path)
 
     def connect_vm(self):
         print(f"🚀 Connecting to VM {self.vm_name} in {self.zone}...")
@@ -66,31 +66,49 @@ class CloudContainer:
             return external_ip
         else:
             return None
-    #image variable can be added to method signature to be used to replace the hardcoded image
-    def pull_container(self):
-        print("pulling container...")
-        # subprocess_command = (
-        #     f"{self.gcloud_path} compute ssh {self.vm_name} "
-        #     f"--zone {self.zone} --project {self.project_id} "
-        #     f"--command 'docker pull nvcr.io/nvidia/pytorch:23.08-py3'"
-        # )
-        # subprocess.run(subprocess_command, shell=True, check=True)
+    # #image variable can be added to method signature to be used to replace the hardcoded image
+    # def pull_container(self):
+    #     print("pulling container...")
+    #     output = subprocess.run(
+    #             [
+    #                 self.gcloud_path,
+    #                 "compute", "ssh", self.vm_name,
+    #                 "--project", self.project_id,
+    #                 "--zone", self.zone,
+    #                 "--command", "docker pull nvcr.io/nvidia/pytorch:23.08-py3"
+    #             ],
+    #             capture_output=True,  # capture both stdout and stderr
+    #             text=True,
+    #             check=True
+    #         )
+    #     print("------output-----")
+    #     print(output)
+    #     print("✅ Container image is ready!")
         
-        output = subprocess.run(
-                [
-                    self.gcloud_path,
-                    "compute", "ssh", self.vm_name,
-                    "--project", self.project_id,
-                    "--zone", self.zone,
-                    "--command", "docker pull nvcr.io/nvidia/pytorch:23.08-py3"
-                ],
-                capture_output=True,  # capture both stdout and stderr
-                text=True,
-                check=True
-            )
-        print("------output-----")
-        print(output)
-        print("✅ Container image is ready!")
+    def start_container(self, container_image="nvcr.io/nvidia/pytorch:23.08-py3"):
+        """
+        Starts a fresh container on the VM and keeps it running.
+        Returns a container name so we can exec commands later.
+        """
+        self.wait_for_ssh(self.get_vm_external_ip())
+        container_name = f"container_{uuid.uuid4().hex[:8]}"  # unique name
+    
+        cmd = (
+            f'docker run -d --name {container_name} {container_image} tail -f /dev/null'
+        )
+        # -d = detached, tail -f /dev/null keeps it alive
+        subprocess.run(
+            [
+                self.gcloud_path,
+                "compute", "ssh", self.vm_name,
+                "--project", self.project_id,
+                "--zone", self.zone,
+                "--command", cmd
+            ],
+            check=True
+        )
+        print(f"🚀 Container {container_name} started and ready!")
+        self.active_container = container_name
 
     def run_code(self, code: str, packages=None):
         """Run arbitrary Python code on the VM and print output live."""
@@ -105,8 +123,8 @@ class CloudContainer:
         )
         
         
-        print("packages")
-        print(packages)
+        # print("packages")
+        # print(packages)
         container_image = "nvcr.io/nvidia/pytorch:23.08-py3" #THIS IS HARDCODED BUT CAN BE AND SHOULD BE CHANGED LATER
         
         #Handle Installing User Defined Packages on the VM
@@ -121,11 +139,14 @@ class CloudContainer:
             # container_cmd = f'docker run --rm --gpus all {container_image} bash -c "pip install -q {pkgs_str} && {remote_cmd}"'
             remote_cmd = f"{install_cmd} && {remote_cmd}"
             
-         #Run command on container   
-        container_cmd = f'DOCKER_TMPDIR=/mnt/stateful_partition/docker-tmp docker run --rm {container_image} {remote_cmd}'
+        # Run command inside container
+        # - image is pre-pulled, so this should be very fast
+        # container_cmd = f'DOCKER_TMPDIR=/mnt/stateful_partition/docker-tmp docker run --rm {container_image} {remote_cmd}'
+        container_cmd = f"docker exec -i {self.active_container} {remote_cmd}"
+        # container_cmd = f"docker exec {self.active_container} python3 -c {remote_cmd}\""
         #--runtime=nvidia --gpus all
         self.wait_for_ssh(self.get_vm_external_ip())
-        print(f"🚀 Running command on container {self.vm_name} ...")
+        print(f"🚀 Running command on container {self.active_container} ...")
 
         try:
             result = subprocess.run(
@@ -155,7 +176,28 @@ class CloudContainer:
             print("------------------")
        
         
-    
+    def stop_container(self):
+        """Stop and remove the active container, if any."""
+        if hasattr(self, "active_container") and self.active_container:
+            print(f"🛑 Stopping container {self.active_container}...")
+            try:
+                cmd = f"docker rm -f {self.active_container}"
+                subprocess.run(
+                    [
+                        self.gcloud_path,
+                        "compute", "ssh", self.vm_name,
+                        "--project", self.project_id,
+                        "--zone", self.zone,
+                        "--command", cmd
+                    ],
+                    check=True
+                )
+                print(f"✅ Container {self.active_container} stopped and removed!")
+            except subprocess.CalledProcessError as e:
+                print(f"⚠️ Error stopping container {self.active_container}:\n{e}")
+            finally:
+                self.active_container = None
+
     def stop_vm(self):
         print(f"🛑 Stopping VM {self.vm_name}...")
         subprocess.run([
