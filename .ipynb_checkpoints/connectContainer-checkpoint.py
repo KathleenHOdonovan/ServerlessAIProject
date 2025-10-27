@@ -136,7 +136,6 @@ class CloudContainer:
                 # "sudo apt-get install -y python3-pip && "
                 "pip3 install -q " + " ".join(packages)
             )
-            # container_cmd = f'docker run --rm --gpus all {container_image} bash -c "pip install -q {pkgs_str} && {remote_cmd}"'
             remote_cmd = f"{install_cmd} && {remote_cmd}"
             
         # Run command inside container
@@ -145,7 +144,7 @@ class CloudContainer:
         container_cmd = f"docker exec -i {self.active_container} {remote_cmd}"
         # container_cmd = f"docker exec {self.active_container} python3 -c {remote_cmd}\""
         #--runtime=nvidia --gpus all
-        self.wait_for_ssh(self.get_vm_external_ip())
+        # self.wait_for_ssh(self.get_vm_external_ip())
         print(f"🚀 Running command on container {self.active_container} ...")
 
         try:
