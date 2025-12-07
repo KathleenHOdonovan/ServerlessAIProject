@@ -99,15 +99,11 @@ class CloudVM:
         print("wait for ssh")
         self.wait_for_ssh(self.get_vm_external_ip())
         print("Setup ssh")
-        self.setup_ssh()
+        self.connect_ssh()
 
         print(f"✅ VM {self.vm_name} created successfully!")
-        
-    def setup_ssh(self):
-        """Generate an SSH key and add it to the VM metadata, then connect via Paramiko."""
-        vm_ip = self.get_vm_external_ip()
-        print("🔑 Setting up SSH access...")
-    
+    def setup_ssh_keys(self):
+        """Generate an SSH key and add it to the VM metadata """
         # Generate OpenSSH key pair
         private_key_path = os.path.join(tempfile.gettempdir(), f"temp_ssh_key_{uuid.uuid4().hex}")
         public_key_path = private_key_path + ".pub"
@@ -135,7 +131,17 @@ class CloudVM:
     
         # Assign the private key path so Paramiko can use it
         self.ssh_private_key_path = private_key_path
+        print("keys created")
     
+    def connect_ssh(self):
+        """connect via Paramiko."""
+        if not self.ssh_private_key_path:
+            self.setup_ssh_keys()
+        
+        vm_ip = self.get_vm_external_ip()
+        print("🔑 Setting up SSH access...")
+    
+        
         # Connect via Paramiko
         self.ssh_client = paramiko.SSHClient()
         self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -168,6 +174,15 @@ class CloudVM:
             except Exception:
                 time.sleep(5)
         return False
+    
+    def close_ssh(self):
+        """Close the persistent SSH session if it's open."""
+        if self.ssh_client:
+            print("🛑 Closing persistent SSH session...")
+            self.ssh_client.close()
+            self.ssh_client = None
+            print("✅ SSH session closed.")
+        
     def wait_for_ssh(self, vm_ip):
         port = 22
         timeout = 300
@@ -197,7 +212,7 @@ class CloudVM:
     def run_code(self, code, packages=None):
         """Send code to the persistent SSH session and capture stdout/stderr."""
         if not self.ssh_client: 
-            self.setup_ssh()
+            self.connect_ssh()
 
         encoded_code = base64.b64encode(code.encode()).decode()
         remote_cmd = (
@@ -253,26 +268,7 @@ class CloudVM:
         #     print(e.stdout)
         #     print(e.stderr)
     
-    def close_master_ssh(self):
-        """Close the master SSH session."""
-        if not self.master_started:
-            return
-
-        print("🛑 Closing master SSH session...")
-        subprocess.run([
-            self.gcloud_path,
-            "compute",
-            "ssh",
-            self.vm_name,
-            "--project", self.project_id,
-            "--zone", self.zone,
-            "--ssh-flag=-O", "exit",
-            "--ssh-flag=-o", "StrictHostKeyChecking=no",
-            "--ssh-flag=-o", "UserKnownHostsFile=/dev/null",
-            "--quiet"
-        ], check=True)
-        self.master_started = False
-        print("✅ Master SSH session closed.")
+    
             
     def resume_vm(self):
         print(f"🚀 Resuming VM {self.vm_name} in {self.zone}...")
@@ -283,14 +279,25 @@ class CloudVM:
             "--project", self.project_id
         ], check=True)
         print(f"✅ VM {self.vm_name} started!")
+         # Wait for SSH port to be ready
+        self.wait_for_ssh(self.get_vm_external_ip())
+    
+        # Reconnect persistent SSH session using existing key
+        print("🔑 Reconnecting persistent SSH session...")
+        self.connect_ssh()
+        print("reconnected")
+        
     def stop_vm(self):
         print(f"🛑 Pausing VM {self.vm_name}...")
+        self.close_ssh()
+        print("session closed")
         subprocess.run([
             self.gcloud_path, "compute", "instances", "stop", self.vm_name,
             "--zone", self.zone,
             "--project", self.project_id
         ], check=True)
         print(f"✅ VM {self.vm_name} paused!")
+        
     def delete_vm(self):
         print(f"🧹 Deleting VM {self.vm_name}...")
         instance_client = compute_v1.InstancesClient()
