@@ -10,15 +10,28 @@ from googleapiclient import discovery
 from google.cloud import compute_v1
 
 class CloudVM:
-    def __init__(self, service_account_file, project_id, zone="us-central1-a", machine_type="e2-medium", image="debian-11"):
+    def __init__(
+        self,
+        service_account_file,
+        project_id,
+        zone="us-central1-a",
+        machine_type="e2-medium",
+        image="debian-11",
+        gpu_type=None,
+        gpu_count=0,
+    ):
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = service_account_file
         self.project_id = project_id
         self.zone = zone
         self.machine_type = f"zones/{zone}/machineTypes/{machine_type}"
         self.source_image = f"projects/debian-cloud/global/images/family/{image}"
-        self.credentials = service_account.Credentials.from_service_account_file(service_account_file)
+        self.credentials = service_account.Credentials.from_service_account_file(
+            service_account_file
+        )
         self.compute = discovery.build("compute", "v1", credentials=self.credentials)
         self.vm_name = f"vm-{uuid.uuid4().hex[:8]}"
+        self.gpu_type = gpu_type
+        self.gpu_count = gpu_count
 
     def create_vm(self):
         print(f"🚀 Creating VM {self.vm_name} in {self.zone}...")
@@ -40,16 +53,35 @@ class CloudVM:
             network_interfaces=[
                 compute_v1.NetworkInterface(
                     name="global/networks/default",
-                    access_configs=[compute_v1.AccessConfig(name="External NAT", type="ONE_TO_ONE_NAT")],
+                    access_configs=[
+                        compute_v1.AccessConfig(
+                            name="External NAT",
+                            type="ONE_TO_ONE_NAT",
+                        )
+                    ],
                 )
             ],
             service_accounts=[
                 compute_v1.ServiceAccount(
                     email="serverless-gpu-access@genial-caster-473015-f0.iam.gserviceaccount.com",
-                    scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
                 )
             ],
         )
+
+        if self.gpu_type and self.gpu_count > 0:
+            accelerator_type_full = (
+                f"projects/{self.project_id}/zones/{self.zone}/acceleratorTypes/{self.gpu_type}"
+            )
+            instance_config.guest_accelerators = [
+                compute_v1.AcceleratorConfig(
+                    accelerator_type=accelerator_type_full,
+                    accelerator_count=self.gpu_count,
+                )
+            ]
+            instance_config.scheduling = compute_v1.Scheduling(
+                on_host_maintenance="TERMINATE"
+            )
 
         request = compute_v1.InsertInstanceRequest(
             project=self.project_id,
@@ -60,9 +92,10 @@ class CloudVM:
         op = instance_client.insert(request=request)
         op.result()
         print(f"✅ VM {self.vm_name} created successfully!")
+
     def wait_for_ssh(self, vm_ip):
-        port=22
-        timeout=300
+        port = 22
+        timeout = 300
         start = time.time()
         while True:
             try:
@@ -74,48 +107,34 @@ class CloudVM:
                     raise TimeoutError("VM SSH never became available.")
                 print("⏳ Waiting for VM SSH...")
                 time.sleep(5)
+
     def get_vm_external_ip(self):
         instance_client = compute_v1.InstancesClient()
-        instance = instance_client.get(project=self.project_id, zone=self.zone, instance=self.vm_name)
-        
-        # Most VMs have at least one network interface
-        nic = instance.network_interfaces[0]
-        
-        # External IP is in access_configs
-        if nic.access_configs:
-            external_ip = nic.access_configs[0].nat_i_p
-            return external_ip
-        else:
-            return None
-    def run_code(self, code: str, packages=None):
-        """Run arbitrary Python code on the VM and print output live."""
-        print("🧠 Executing code remotely...")
-        gcloud_path = shutil.which("gcloud")
-        if not gcloud_path:
-            raise RuntimeError(
-                "❌ Google Cloud SDK (`gcloud`) not found.\n"
-                "Please install it from https://cloud.google.com/sdk/docs/install\n"
-                "and make sure it is added to your system PATH."
-            )
-        # else:
-            # print("goooogle")
-            # print(gcloud_path)
-            
-        
-        # Encode the full Python code to base64 to safely preserve newlines and quotes
-        encoded_code = base64.b64encode(code.encode()).decode("utf-8")
-    
-        # Remote command: decode + execute the code inside Python
-        remote_cmd = (
-            f'python3 -c "import base64; exec(base64.b64decode(\'{encoded_code}\').decode())"'
+        instance = instance_client.get(
+            project=self.project_id, zone=self.zone, instance=self.vm_name
         )
-        
+        for interface in instance.network_interfaces:
+            for access_config in interface.access_configs:
+                if access_config.type_ == "ONE_TO_ONE_NAT":
+                    return access_config.nat_i_p
+        raise RuntimeError("No external IP found for the VM.")
+
+    def run_code(self, code, packages=None):
+        vm_ip = self.get_vm_external_ip()
+        print(f"🌐 VM external IP: {vm_ip}")
+
+        encoded_code = base64.b64encode(code.encode()).decode()
+        remote_cmd = (
+            f'python3 -c "import base64; '
+            f'exec(base64.b64decode(\'{encoded_code}\').decode())"'
+        )
+
         print("packages")
         print(packages)
-        #Handle Installing User Defined Packages on the VM
+        # Handle installing user-defined packages on the VM
         if packages and isinstance(packages, str):
             packages = [pkg.strip() for pkg in packages.split(" ")]
-            
+
             install_cmd = (
                 "sudo apt-get update -y && "
                 "sudo apt-get install -y python3-pip && "
@@ -126,25 +145,28 @@ class CloudVM:
         self.wait_for_ssh(self.get_vm_external_ip())
         print(f"🚀 Running command on VM {self.vm_name} ...")
 
+        ssh_cmd = [
+            "gcloud",
+            "compute",
+            "ssh",
+            f"serverless-user@{self.vm_name}",
+            "--project",
+            self.project_id,
+            "--zone",
+            self.zone,
+            "--command",
+            remote_cmd,
+        ]
+
         try:
             result = subprocess.run(
-                [
-                    gcloud_path,
-                    "compute", "ssh", self.vm_name,
-                    "--project", self.project_id,
-                    "--zone", self.zone,
-                    "--command", remote_cmd
-                ],
-                capture_output=True,  # capture both stdout and stderr
-                text=True,
-                check=True
+                ssh_cmd, check=True, text=True, capture_output=True
             )
-    
-            print("✅ Command executed successfully!")
             print("----- STDOUT -----")
             print(result.stdout)
+            print("----- STDERR -----")
+            print(result.stderr)
             print("------------------")
-    
         except subprocess.CalledProcessError as e:
             print("❌ An error occurred while running code on the VM:")
             print("----- STDOUT -----")
@@ -152,12 +174,13 @@ class CloudVM:
             print("----- STDERR -----")
             print(e.stderr)
             print("------------------")
-       
-        
-    
+
     def delete_vm(self):
         print(f"🧹 Deleting VM {self.vm_name}...")
         instance_client = compute_v1.InstancesClient()
-        delete_op = instance_client.delete(project=self.project_id, zone=self.zone, instance=self.vm_name)
+        delete_op = instance_client.delete(
+            project=self.project_id, zone=self.zone, instance=self.vm_name
+        )
         delete_op.result()
         print("✅ VM deleted.")
+
