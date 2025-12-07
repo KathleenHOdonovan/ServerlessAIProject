@@ -43,13 +43,13 @@ def load_ipython_extension(ipython):
     ipython.register_magics(RunContainerMagic)
     # 2️⃣ Register Jupyter kernel shutdown hook (works for restarts)
     # ---- PATCH IPython SHUTDOWN HOOK ----
-    def custom_shutdown_hook():
-        print("💀 IPython shutdown hook triggered — cleaning VM & container...")
-        _cleanup()
-        default_shutdown_hook()  # call the real hook afterward
+    # def custom_shutdown_hook():
+    #     print("💀 IPython shutdown hook triggered — cleaning VM & container...")
+    #     _cleanup()
+    #     default_shutdown_hook()  # call the real hook afterward
 
-    ipython.set_hook('shutdown_hook', custom_shutdown_hook)
-    # --------------------------------------
+    # ipython.set_hook('shutdown_hook', custom_shutdown_hook)
+    # # --------------------------------------
 
     print("⏳ Initializing CloudContainer and starting/resuming VM...")
     vm = CloudContainer(

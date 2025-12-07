@@ -69,14 +69,12 @@ class CloudVM:
             ],
         )
 
-        # 如果有選 GPU，就掛上 accelerator
         if self.gpu_type and self.gpu_count > 0:
-            accelerator_type_full = (
-                f"projects/{self.project_id}/zones/{self.zone}/acceleratorTypes/{self.gpu_type}"
-            )
             instance_config.guest_accelerators = [
                 compute_v1.AcceleratorConfig(
-                    accelerator_type=accelerator_type_full,
+                    accelerator_type=(
+                        f"projects/{self.project_id}/zones/{self.zone}/acceleratorTypes/{self.gpu_type}"
+                    ),
                     accelerator_count=self.gpu_count,
                 )
             ]
@@ -84,14 +82,13 @@ class CloudVM:
                 on_host_maintenance="TERMINATE"
             )
 
-        request = compute_v1.InsertInstanceRequest(
+        op = instance_client.insert(
             project=self.project_id,
             zone=self.zone,
             instance_resource=instance_config,
         )
-
-        op = instance_client.insert(request=request)
         op.result()
+
         print(f"✅ VM {self.vm_name} created successfully!")
 
     def wait_for_ssh(self, vm_ip):
@@ -114,8 +111,8 @@ class CloudVM:
         instance = instance_client.get(
             project=self.project_id, zone=self.zone, instance=self.vm_name
         )
-        for interface in instance.network_interfaces:
-            for access_config in interface.access_configs:
+        for nic in instance.network_interfaces:
+            for access_config in nic.access_configs:
                 if access_config.type_ == "ONE_TO_ONE_NAT":
                     return access_config.nat_i_p
         raise RuntimeError("No external IP found for the VM.")
@@ -130,12 +127,9 @@ class CloudVM:
             f'exec(base64.b64decode(\'{encoded_code}\').decode())"'
         )
 
-        print("packages")
-        print(packages)
-        # Handle installing user-defined packages on the VM
+        # Package installation
         if packages and isinstance(packages, str):
-            packages = [pkg.strip() for pkg in packages.split(" ")]
-
+            packages = [p.strip() for p in packages.split(" ")]
             install_cmd = (
                 "sudo apt-get update -y && "
                 "sudo apt-get install -y python3-pip && "
@@ -143,8 +137,7 @@ class CloudVM:
             )
             remote_cmd = f"{install_cmd} && {remote_cmd}"
 
-        self.wait_for_ssh(self.get_vm_external_ip())
-        print(f"🚀 Running command on VM {self.vm_name} ...")
+        self.wait_for_ssh(vm_ip)
 
         ssh_cmd = [
             "gcloud",
@@ -167,21 +160,16 @@ class CloudVM:
             print(result.stdout)
             print("----- STDERR -----")
             print(result.stderr)
-            print("------------------")
         except subprocess.CalledProcessError as e:
-            print("❌ An error occurred while running code on the VM:")
-            print("----- STDOUT -----")
+            print("❌ Error executing remote code:")
             print(e.stdout)
-            print("----- STDERR -----")
             print(e.stderr)
-            print("------------------")
 
     def delete_vm(self):
         print(f"🧹 Deleting VM {self.vm_name}...")
         instance_client = compute_v1.InstancesClient()
-        delete_op = instance_client.delete(
+        op = instance_client.delete(
             project=self.project_id, zone=self.zone, instance=self.vm_name
         )
-        delete_op.result()
+        op.result()
         print("✅ VM deleted.")
-
