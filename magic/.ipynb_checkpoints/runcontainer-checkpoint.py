@@ -1,4 +1,5 @@
 from IPython.core.magic import (Magics, magics_class, line_cell_magic)
+# from IPython.core.hooks import shutdown_hook as default_shutdown_hook
 from connectContainer import CloudContainer
 import time
 import atexit
@@ -18,12 +19,12 @@ class RunContainerMagic(Magics):
 
     @line_cell_magic
     def runcontainer(self, line, cell=None):
+        start = time.time()
         global vm
         if vm is None:
             print("❌ VM is not initialized. Reload the extension.")
             return
         try:
-            start = time.time()
             if cell is None:
                 # single-line command
                 vm.run_code(line)
@@ -40,6 +41,15 @@ class RunContainerMagic(Magics):
 def load_ipython_extension(ipython):
     global vm
     ipython.register_magics(RunContainerMagic)
+    # 2️⃣ Register Jupyter kernel shutdown hook (works for restarts)
+    # ---- PATCH IPython SHUTDOWN HOOK ----
+    def custom_shutdown_hook():
+        print("💀 IPython shutdown hook triggered — cleaning VM & container...")
+        _cleanup()
+        default_shutdown_hook()  # call the real hook afterward
+
+    ipython.set_hook('shutdown_hook', custom_shutdown_hook)
+    # --------------------------------------
 
     print("⏳ Initializing CloudContainer and starting/resuming VM...")
     vm = CloudContainer(
@@ -59,7 +69,8 @@ def load_ipython_extension(ipython):
 
     # Register automatic cleanup when notebook/kernel shuts down
     atexit.register(_cleanup)
-
+    
+    
 def unload_ipython_extension(ipython):
     _cleanup()
 

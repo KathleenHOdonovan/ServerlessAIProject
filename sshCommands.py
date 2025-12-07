@@ -97,11 +97,6 @@ class CloudVM:
                 "Please install it from https://cloud.google.com/sdk/docs/install\n"
                 "and make sure it is added to your system PATH."
             )
-        # else:
-            # print("goooogle")
-            # print(gcloud_path)
-            
-        
         # Encode the full Python code to base64 to safely preserve newlines and quotes
         encoded_code = base64.b64encode(code.encode()).decode("utf-8")
     

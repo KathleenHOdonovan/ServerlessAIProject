@@ -161,7 +161,7 @@ class CloudContainer:
                 check=True
             )
     
-            print("✅ Command executed successfully!")
+            # print("✅ Command executed successfully!")
             print("----- STDOUT -----")
             print(result.stdout)
             print("------------------")

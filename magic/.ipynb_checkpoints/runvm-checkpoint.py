@@ -1,5 +1,6 @@
 from IPython.core.magic import (Magics, magics_class, line_cell_magic)
 from sshCommands import CloudVM
+import time
 
 #STATIC VARIABLES THAT CAN BE CHANGES DEPENDING ON WHO IS USING THIS APPLICATION:
 
@@ -15,6 +16,7 @@ class RunVMMagic(Magics):
 
     @line_cell_magic
     def runvm(self, line, cell=None):
+        start = time.time()
         #Start up VM
         vm = CloudVM(
             service_account_file=service_account_file,
@@ -51,6 +53,8 @@ class RunVMMagic(Magics):
                     vm.delete_vm()
             except Exception as e:
                 return f"Error: {e}"
+        end = time.time()
+        print(f"⏱ Total execution time: {end - start:.2f} seconds")
         return f"Finished Running Command on GPU VM"
 def load_ipython_extension(ipython):
     ipython.register_magics(RunVMMagic)
