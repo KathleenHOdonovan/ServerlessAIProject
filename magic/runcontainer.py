@@ -17,9 +17,10 @@ import traceback
 
 
 # STATIC VARIABLES THAT CAN BE CHANGED DEPENDING ON WHO IS USING THIS APPLICATION
-service_account_file = r"C:\Users\kj2od\Documents\ServerlessAI\genial-caster-473015-f0-d2fdd5d3592d.json"
-project_id = "genial-caster-473015-f0"
-zone = "us-east4-c"
+# service_account_file = r"C:\Users\kj2od\Documents\ServerlessAI\genial-caster-473015-f0-d2fdd5d3592d.json"
+# C:/Users/kj2od/Documents/ServerlessAI/genial-caster-473015-f0-d2fdd5d3592d.json
+# project_id = "genial-caster-473015-f0"
+# zone = "us-east4-c"
 
 # Global VM instance
 '''This global vm instance allows the vm to be initialized during the initilization of this magic command
@@ -53,32 +54,34 @@ class RunContainerMagic(Magics):
 
 gpu_type_limits = {}
     
-# 1. Basic Config
+# 1. -----BASIC CONFIG----
+#service account credentials
 service_account_text = widgets.Text(
     description="Service JSON",
     placeholder="Path to your service account file",
     layout=widgets.Layout(width="500px"),
 )
 
+#project id text box
 project_id_text = widgets.Text(
     description="Project ID",
     placeholder="your-gcp-project-id",
     layout=widgets.Layout(width="400px"),
 )
-
+#zone dropdown box
 zone_dropdown = widgets.Dropdown(
     options=["us-east4-b", "us-central1-a", "us-central1-b"],
     value="us-east4-b",
     description="Zone",
     layout=widgets.Layout(width="250px"),
 )
-
+#machine type dropdown
 machine_type_dropdown = widgets.Dropdown(
     options=[],          
     description="Machine",
     layout=widgets.Layout(width="250px"),
 )
-
+#gpu type dropdown
 gpu_type_dropdown = widgets.Dropdown(
     options=[
         ("No GPU", "none"),
@@ -105,18 +108,29 @@ packages_text = widgets.Text(
     layout=widgets.Layout(width="500px"),
 )
 
-code_textarea = widgets.Textarea(
-    description="Code",
-    placeholder="Write Python code here to run on the VM",
-    layout=widgets.Layout(width="800px", height="200px"),
-)
+# code_textarea = widgets.Textarea(
+#     description="Code",
+#     placeholder="Write Python code here to run on the VM",
+#     layout=widgets.Layout(width="800px", height="200px"),
+# )
 
+#Buttons
 run_button = widgets.Button(
-    description="Run on GPU VM",
+    description="Start GPU VM",
     button_style="primary",
 )
-
-output_area = widgets.Output()
+pause_button = widgets.Button(
+    description="Pause VM",
+    button_style="primary",
+)
+resume_button = widgets.Button(
+    description="Resume VM",
+    button_style="primary",
+)
+delete_button = widgets.Button(
+    description="Delete VM",
+    button_style="primary",
+)
 
 load_mtypes_button = widgets.Button(
     description="Load machine types",
@@ -124,6 +138,7 @@ load_mtypes_button = widgets.Button(
     layout=widgets.Layout(width="200px"),
 )
 
+output_area = widgets.Output()
 #Refresh Functions for gui
 
 def refresh_machine_types(*args):
@@ -212,14 +227,14 @@ def on_run_button_clicked(b):
     with output_area:
         print("▶ Starting remote GPU run...\n")
 
-        # service_account_file = service_account_text.value.strip() #ADD THIS BACK
+        service_account_file = service_account_text.value.strip() #ADD THIS BACK
         project_id = project_id_text.value.strip()
         zone = zone_dropdown.value
         machine_type = machine_type_dropdown.value
         gpu_type = gpu_type_dropdown.value
         gpu_count = gpu_count_int.value if gpu_type != "none" else 0
         packages = packages_text.value.strip()
-        code = code_textarea.value
+        # code = code_textarea.value
 
         if not service_account_file or not project_id:
             print("❌ Please provide both Service JSON path and Project ID.")
@@ -238,7 +253,7 @@ def on_run_button_clicked(b):
                 )
                 print("VM created")
                 vm.create_vm()
-                vm.run_code(code, packages)
+                # vm.run_code(code, packages)
             except Exception:
                 print("❌ An error occurred:")
                 traceback.print_exc()
@@ -255,10 +270,51 @@ def on_run_button_clicked(b):
 
 run_button.on_click(on_run_button_clicked)
 
+def on_pause_button_clicked(b):
+    global vm
+    output_area.clear_output()
+    buf = io.StringIO()
+
+    with output_area:
+        print("▶ Pausing remote GPU run...\n")
+        vm.stop_vm()
+        print("✅ VM stopped!")
+        
+pause_button.on_click(on_pause_button_clicked)
+
+def on_resume_button_clicked(b):
+    global vm
+    output_area.clear_output()
+    buf = io.StringIO()
+
+    with output_area:
+        print("▶ Resuming remote GPU run...\n")
+        vm.resume_vm()
+        print("✅ VM resumed!")
+        
+resume_button.on_click(on_resume_button_clicked)
+
+def on_delete_button_clicked(b):
+    global vm
+    output_area.clear_output()
+    buf = io.StringIO()
+    with output_area:
+        if vm:
+            print("Deleting VM...")
+            try:
+                vm.delete_vm()
+                vm = None
+                print("✅ Deletion complete!")
+            except Exception as e:
+                print(f"⚠️ Error Deleting vm: {e}")
+            
+
+delete_button.on_click(on_delete_button_clicked)
+
 def on_load_button_clicked(b):
     refresh_machine_types()
     refresh_gpu_types()
-    
+load_mtypes_button.on_click(on_load_button_clicked) 
 # ---------------- EXTENSION LOAD/UNLOAD ----------------
 def load_ipython_extension(ipython):
     global vm
@@ -278,14 +334,17 @@ def load_ipython_extension(ipython):
     gui = widgets.VBox(
         [
             config_box,
-            code_textarea,
+            # code_textarea,
             run_button,
+            pause_button,
+            resume_button,
+            delete_button,            
             widgets.Label("Output:"),
             output_area,
         ]
     )
     
-    load_mtypes_button.on_click(on_load_button_clicked)
+    
     
     
     display(gui)
@@ -323,11 +382,11 @@ def _cleanup():
     if vm:
         print("🧹 Cleaning up resources...")
         try:
-            vm.stop_container()
+            vm.delete_vm()
         except Exception as e:
             print(f"⚠️ Error stopping container: {e}")
         try:
-            vm.stop_vm()
+            vm.delete_vm()
         except Exception as e:
             print(f"⚠️ Error stopping VM: {e}")
         vm = None
