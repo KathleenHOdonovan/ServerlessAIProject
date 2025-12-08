@@ -220,55 +220,50 @@ class CloudVM:
             f'exec(base64.b64decode(\'{encoded_code}\').decode())"'
         )
 
-        # Package installation
-        if packages and isinstance(packages, str):
-            packages = [p.strip() for p in packages.split(" ")]
-            install_cmd = (
-                "sudo apt-get update -y && "
-                "sudo apt-get install -y python3-pip && "
-                "pip3 install -q " + " ".join(packages)
-            )
-            remote_cmd = f"{install_cmd} && {remote_cmd}"
+        # # Package installation
+        # if packages and isinstance(packages, str):
+        #     packages = [p.strip() for p in packages.split(" ")]
+        #     install_cmd = (
+        #         "sudo apt-get update -y && "
+        #         "sudo apt-get install -y python3-pip && "
+        #         "pip3 install -q " + " ".join(packages)
+        #     )
+        #     remote_cmd = f"{install_cmd} && {remote_cmd}"
 
-        # self.wait_for_ssh(vm_ip)
-
-        # print("before command")
-
-        # ssh_cmd = [
-        #     self.gcloud_path,
-        #     "compute",
-        #     "ssh",
-        #     self.vm_name,
-        #     # f"serverless-user@{self.vm_name}",
-        #     "--project",
-        #     self.project_id,
-        #     "--zone",
-        #     self.zone,
-        #     "--command",
-        #     remote_cmd,
-        #     "--quiet",
-        #     "--strict-host-key-checking=no",
-        # ]
         stdin, stdout, stderr = self.ssh_client.exec_command(remote_cmd) 
         out = stdout.read().decode() 
         err = stderr.read().decode() 
         print(out)
         print(err)
 
-        # try:
-        #     result = subprocess.run(
-        #         ssh_cmd, check=True, text=True, capture_output=True
-        #     )
-        #     print("----- STDOUT -----")
-        #     print(result.stdout)
-        #     print("----- STDERR -----")
-        #     print(result.stderr)
-        # except subprocess.CalledProcessError as e:
-        #     print("❌ Error executing remote code:")
-        #     print(e.stdout)
-        #     print(e.stderr)
+    def install_packages(self, packages):
+        """
+        Install Python packages on the VM via persistent SSH.
+        Accepts a list of package names or a space-separated string.
+        """
+        print("Installing packages: ", packages)
+        if not self.ssh_client:
+            self.connect_ssh()  # ensure SSH session exists
+        
+        if isinstance(packages, str):
+            packages = packages.split()
+        
+        pkg_str = " ".join(packages)
+        cmd = f"sudo DEBIAN_FRONTEND=noninteractive apt-get update -y && sudo apt-get install -y python3-pip && pip3 install -q {pkg_str}"
+        
+        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
+        out = stdout.read().decode()
+        print(out)
+        err = stderr.read().decode()
+        print(err)
+        
+        if err:
+            print(f"⚠ Errors occurred while installing packages:\n{err}")
+        else:
+            print(f"✅ Packages installed: {pkg_str}")
+        # return out, err
     
-    
+        
             
     def resume_vm(self):
         print(f"🚀 Resuming VM {self.vm_name} in {self.zone}...")

@@ -70,7 +70,16 @@ project_id_text = widgets.Text(
 )
 #zone dropdown box
 zone_dropdown = widgets.Dropdown(
-    options=["us-east4-b", "us-central1-a", "us-central1-b"],
+    # options=["us-east4-b", "us-central1-a", "us-central1-b"],
+    options = [
+    "us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f",
+    "us-east1-b", "us-east1-c", "us-east1-d",
+    "us-east4-a", "us-east4-b", "us-east4-c",
+    "us-west4-a", "us-west4-b", "us-west4-c",
+    "northamerica-northeast1-a", "northamerica-northeast1-b", "northamerica-northeast1-c",
+    "europe-west4-a", "europe-west4-b", "europe-west4-c",
+    "asia-southeast1-a", "asia-southeast1-b", "asia-southeast1-c",
+    ],
     value="us-east4-b",
     description="Zone",
     layout=widgets.Layout(width="250px"),
@@ -239,24 +248,25 @@ def on_run_button_clicked(b):
         if not service_account_file or not project_id:
             print("❌ Please provide both Service JSON path and Project ID.")
             return
-        with contextlib.redirect_stdout(buf):
-            try:
-                print("attempting vm creation")
-                print(service_account_file)
-                vm = CloudVM(
-                    service_account_file=service_account_file,
-                    project_id=project_id,
-                    zone=zone,
-                    machine_type=machine_type,
-                    gpu_type=None if gpu_type == "none" else gpu_type,
-                    gpu_count=gpu_count,
-                )
-                print("VM created")
-                vm.create_vm()
-                # vm.run_code(code, packages)
-            except Exception:
-                print("❌ An error occurred:")
-                traceback.print_exc()
+        # with contextlib.redirect_stdout(buf):
+        try:
+            print("Creating vm...\n")
+            print(service_account_file)
+            vm = CloudVM(
+                service_account_file=service_account_file,
+                project_id=project_id,
+                zone=zone,
+                machine_type=machine_type,
+                gpu_type=None if gpu_type == "none" else gpu_type,
+                gpu_count=gpu_count,
+            )
+            print("VM created")
+            vm.create_vm()
+            vm.install_packages(packages)
+            # vm.run_code(code, packages)
+        except Exception:
+            print("❌ An error occurred:")
+            traceback.print_exc()
             # finally:
             #     try:
             #         # vm.delete_vm()
